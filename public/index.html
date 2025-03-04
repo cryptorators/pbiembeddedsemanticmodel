@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power BI with Chat Interfaces</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Power BI JavaScript API -->
+    <script src="https://cdn.jsdelivr.net/npm/powerbi-client@2.18.6/dist/powerbi.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Left side: Power BI Report -->
+        <div class="report-container">
+            <div class="report-header">
+                <h2>Power BI Report</h2>
+                <div class="report-actions">
+                    <button id="toggle-filter-pane" class="action-button">Toggle Filter Pane</button>
+                    <span class="report-status">Loading...</span>
+                </div>
+            </div>
+            <div id="powerbi-report"></div>
+        </div>
+        <!-- Right side: Chat interfaces -->
+        <div class="chat-container">
+            <!-- PBI Filter Chat -->
+            <div class="chat-box">
+                <div class="chat-header">
+                    <h3>PBI Filter Assistant</h3>
+                    <p>Ask to filter or visualize data from the report</p>
+                </div>
+                <div class="chat-messages" id="pbi-messages">
+                    <div class="message system">
+                        Hello! I can help you filter and explore the Power BI report. Try saying "Show me sales for the last quarter" or "Filter to the top 5 products".
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" id="pbi-input" placeholder="Ask about filtering the report...">
+                    <button id="pbi-send">Send</button>
+                </div>
+            </div>
+            <!-- General Assistant Chat -->
+            <div class="chat-box">
+                <div class="chat-header">
+                    <h3>General Assistant</h3>
+                    <p>Ask any questions about your data</p>
+                </div>
+                <div class="chat-messages" id="openai-messages">
+                    <div class="message system">
+                        Hello! I'm your assistant powered by Azure OpenAI with Power BI semantic model integration. I can answer questions using data from your Power BI datasets. Try asking me something like "What were the total sales last month?" or any question about your data.
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <input type="text" id="openai-input" placeholder="Ask me anything...">
+                    <button id="openai-send">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
+
+
+

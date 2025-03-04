@@ -1,0 +1,453 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+
+body {
+    background-color: #f5f7fb;
+    color: #333;
+    height: 100vh;
+    overflow: hidden;
+}
+
+
+.app-container {
+    display: flex;
+    height: 100vh;
+    max-height: 100vh;
+}
+
+
+/* Power BI Report Section */
+.report-container {
+    flex: 1.6;
+    background-color: white;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid #e6e9f0;
+}
+
+
+.report-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #e6e9f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+
+.report-header h2 {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #252733;
+}
+
+
+.report-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+
+.action-button {
+    padding: 6px 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+
+.action-button:hover {
+    background-color: #0069d9;
+}
+
+
+.report-status {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+
+#powerbi-report {
+    flex: 1;
+    width: 100%;
+    height: calc(100% - 60px);
+    background-color: #f8f9fa;
+}
+
+
+/* Chat Interfaces Section */
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-height: 100vh;
+}
+
+
+.chat-box {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: white;
+    margin: 10px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+}
+
+
+.chat-header {
+    padding: 16px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e6e9f0;
+}
+
+
+.chat-header h3 {
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+    color: #252733;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+
+.chat-header h3 .search-badge {
+    font-size: 0.7rem;
+    background-color: #4682B4;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: normal;
+}
+
+
+.chat-header p {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+
+.chat-messages {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+
+.message {
+    padding: 10px 14px;
+    border-radius: 10px;
+    max-width: 85%;
+    word-wrap: break-word;
+}
+
+
+.message.system {
+    background-color: #e6e9f0;
+    align-self: flex-start;
+}
+
+
+.message.user {
+    background-color: #007bff;
+    color: white;
+    align-self: flex-end;
+}
+
+
+.message.assistant {
+    background-color: #f1f3f5;
+    align-self: flex-start;
+}
+
+
+.chat-input-container {
+    display: flex;
+    padding: 12px 16px;
+    border-top: 1px solid #e6e9f0;
+    background-color: white;
+}
+
+
+.chat-input-container input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid #e6e9f0;
+    border-radius: 20px;
+    font-size: 0.95rem;
+    outline: none;
+}
+
+
+.chat-input-container input:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+
+.chat-input-container button {
+    margin-left: 10px;
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+
+.chat-input-container button:hover {
+    background-color: #0069d9;
+}
+
+
+/* Loading indicator for chat */
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background-color: #f1f3f5;
+    align-self: flex-start;
+    font-size: 14px;
+    color: #6c757d;
+}
+
+
+.loading-indicator .dot {
+    width: 6px;
+    height: 6px;
+    background-color: #6c757d;
+    border-radius: 50%;
+    animation: dot-pulse 1.5s infinite ease-in-out;
+}
+
+
+.loading-indicator .dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+
+.loading-indicator .dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+
+@keyframes dot-pulse {
+    0%, 100% {
+        transform: scale(0.8);
+        opacity: 0.6;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+}
+
+
+/* Error message */
+.message.error {
+    background-color: #ffe5e5;
+    color: #d32f2f;
+    align-self: flex-start;
+}
+
+
+@media (max-width: 1200px) {
+    .app-container {
+        flex-direction: column;
+    }
+   
+    .report-container, .chat-container {
+        flex: none;
+        height: 50vh;
+    }
+}
+
+
+/* Power BI Data badge */
+.chat-header h3 .pbi-badge {
+    font-size: 0.7rem;
+    background-color: #F2C811;  /* Power BI yellow */
+    color: #333;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: normal;
+}
+
+
+/* Query results styling */
+.query-results {
+    max-width: 95% !important;
+    overflow-x: auto;
+    padding: 12px !important;
+}
+
+
+.results-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+    margin-top: 5px;
+    background-color: white;
+    border-radius: 4px;
+}
+
+
+.results-table th {
+    background-color: #f3f3f3;
+    padding: 8px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid #ddd;
+}
+
+
+.results-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #eee;
+}
+
+
+.results-table tr:last-child td {
+    border-bottom: none;
+}
+
+
+.results-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+
+/* Style for data-specific messages */
+.message.data-message {
+    background-color: #f9f9e8;
+    border-left: 3px solid #F2C811;
+}
+
+
+/* Add a special icon for data-related responses */
+.message.data-message::before {
+    content: "📊";
+    margin-right: 8px;
+}
+
+
+/* Animation for table appearance */
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+
+.results-table {
+    animation: fade-in 0.3s ease-out;
+}
+
+
+/* Add these styles to the end of your existing styles.css file */
+
+
+/* Power BI Data badge */
+.chat-header h3 .pbi-badge {
+    font-size: 0.7rem;
+    background-color: #F2C811;  /* Power BI yellow */
+    color: #333;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: normal;
+}
+
+
+/* Query results styling */
+.query-results {
+    max-width: 95% !important;
+    overflow-x: auto;
+    padding: 12px !important;
+}
+
+
+.results-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.85rem;
+    margin-top: 5px;
+    background-color: white;
+    border-radius: 4px;
+}
+
+
+.results-table th {
+    background-color: #f3f3f3;
+    padding: 8px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid #ddd;
+}
+
+
+.results-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #eee;
+}
+
+
+.results-table tr:last-child td {
+    border-bottom: none;
+}
+
+
+.results-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+
+.fallback-note {
+    font-size: 0.85rem;
+    color: #d32f2f;
+    background-color: #fff8e1;
+    border-left: 3px solid #ffb300;
+    margin-top: -5px;
+    max-width: 95% !important;
+}
+
+
+/* Add a special icon for data-related responses */
+.message.data-message::before {
+    content: "📊";
+    margin-right: 8px;
+}
+
+
+/* Animation for table appearance */
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+
+.results-table {
+    animation: fade-in 0.3s ease-out;
+}
+
+
+
