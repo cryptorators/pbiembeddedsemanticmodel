@@ -84,3 +84,4 @@ Try these natural language queries in the PBI Filter Assistant:
 ## Customization
 
 You can customize the system prompt for the filter generation in `server.js` to match your specific Power BI report structure.
+# pbiembeddedsemanticmodel
