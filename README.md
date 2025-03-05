@@ -125,11 +125,7 @@ The visualization system:
 - Renders interactive charts with custom styling
 - Provides fallback to tabular display when visualization isn't possible
 
-### Row-Level Security
-The app supports Power BI row-level security by:
-- Managing user identity sessions
-- Applying RLS context to embedding tokens and queries
-- Supporting custom RLS roles and parameters
+
 
 ## 🛠️ Customization
 
