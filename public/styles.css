@@ -540,3 +540,88 @@ body {
 .action-button {
     margin-right: 8px;
 }
+
+/* Improved Chart visualization styles */
+.chat-visualization {
+    width: 100%;
+    max-width: 100% !important;
+    margin: 15px 0;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    position: relative;
+    overflow: visible;
+}
+
+.viz-title {
+    font-size: 1.2rem;
+    margin: 0 0 15px 0;
+    color: #333;
+    font-weight: 600;
+    text-align: center;
+}
+
+.chart-wrapper {
+    position: relative;
+    height: 300px;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.chat-chart {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Ensure the chart container has proper dimensions in message context */
+.message.assistant .chat-visualization {
+    max-width: 100% !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* For small screens, adjust height */
+@media (max-width: 768px) {
+    .chart-wrapper {
+        height: 220px;
+    }
+}
+
+/* Add a subtle animation when charts appear */
+.chat-visualization {
+    animation: chart-fade-in 0.5s ease-out forwards;
+}
+
+@keyframes chart-fade-in {
+    from { 
+        opacity: 0; 
+        transform: translateY(15px); 
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+/* Style for chart error messages */
+.chat-visualization .error-message {
+    color: #d32f2f;
+    background-color: #ffebee;
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-top: 10px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+/* Make sure tooltips appear above other elements */
+.chartjs-tooltip {
+    z-index: 100;
+}
+
+/* Ensure canvas renders properly */
+canvas.chat-chart {
+    display: block;
+    box-sizing: border-box;
+}
