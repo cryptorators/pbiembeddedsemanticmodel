@@ -8,15 +8,20 @@ document.addEventListener('DOMContentLoaded', function() {
         openaiInput: document.getElementById('openai-input'),
         openaiSendBtn: document.getElementById('openai-send'),
         reportStatus: document.querySelector('.report-status'),
-        reportContainer: document.getElementById('powerbi-report')
+        reportContainer: document.getElementById('powerbi-report'),
+        createVisualBtn: document.getElementById('create-visual-btn')
     };
-
 
     // State
     let reportObj = null;
     let reportLoaded = false;
     let pbiWaitingForResponse = false;
     let openaiWaitingForResponse = false;
+    // Track current session ID for RLS
+    let currentSessionId = null;
+    // Visualization page and default visual
+    let visualizationPage = null;
+    let defaultVisual = null;
    
     // Helper function to show a placeholder for the report
     function showReportPlaceholder(message = null) {
@@ -41,7 +46,6 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         elements.reportContainer.appendChild(placeholderDiv);
     }
-
 
     // Add a specific function to toggle the filter pane
     // This can be called from the browser console for debugging
@@ -73,7 +77,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Expose this function globally for debugging
     window.toggleFilterPane = toggleFilterPane;
 
-
     async function initPowerBIReport() {
         elements.reportStatus.textContent = 'Connecting...';
        
@@ -85,26 +88,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response.status !== 200) {
                 throw new Error(tokenData.error || 'Error fetching Power BI token');
             }
-            // In a production app, you would use the actual token data
-            // For now, we'll continue with development mode values
+            
             console.log("Token response:", tokenData);
             elements.reportStatus.textContent = 'Development mode: Report would be loaded with a real token';
            
-            // For development, you might want to use a different embed URL or sample report
-            // Define embed configuration with filter pane explicitly enabled
-            const embedConfig = {
-                type: 'report',
-                tokenType: 1, // Embed token
-                accessToken: tokenData.mockToken || 'development_token',
-                embedUrl: tokenData.mockEmbedUrl || 'https://app.powerbi.com/reportEmbed',
-                id: 'development_report_id',
-                permissions: 1, // View
-                settings: {
-                    navContentPaneEnabled: true,
-                    filterPaneEnabled: true
-                }
-            };
-            // Get models instance and embed report
+            // Get models instance
             const powerbi = window.powerbi;
            
             // Try to embed the report if we have proper credentials
@@ -118,28 +106,40 @@ document.addEventListener('DOMContentLoaded', function() {
                         accessToken: tokenData.token,
                         embedUrl: tokenData.embedUrl,
                         id: tokenData.reportId,
-                        permissions: 1, // View
+                        permissions: 7, // View and Edit permissions (was 1 before)
                         settings: {
-                            navContentPaneEnabled: false,
-                            filterPaneEnabled: false
+                            navContentPaneEnabled: true,
+                            filterPaneEnabled: true,
+                            useCustomSaveDialog: true,
+                            panes: {
+                                filters: {
+                                    expanded: false,
+                                    visible: true
+                                },
+                                pageNavigation: {
+                                    visible: true
+                                }
+                            }
                         }
                     };
                    
                     reportObj = powerbi.embed(elements.reportContainer, realEmbedConfig);
                    
                     // Report event handlers
-                    reportObj.on('loaded', function() {
+                    reportObj.on('loaded', async function() {
                         elements.reportStatus.textContent = 'Report loaded';
                         reportLoaded = true;
                        
-                        // Explicitly show filter pane after loading with a simpler approach
+                        // Initialize visualization page if needed
                         try {
-                            reportObj.updateSettings({
-                                filterPaneEnabled: true
-                            });
-                            console.log('Filter pane visibility explicitly set after load');
-                        } catch (settingsError) {
-                            console.error('Error updating filter pane settings:', settingsError);
+                            await initVisualizationPage();
+                        } catch (pageError) {
+                            console.error("Error initializing visualization page:", pageError);
+                        }
+                        
+                        // Enable the create visual button now that report is loaded
+                        if (elements.createVisualBtn) {
+                            elements.createVisualBtn.disabled = false;
                         }
                     });
                    
@@ -169,6 +169,299 @@ document.addEventListener('DOMContentLoaded', function() {
             elements.reportStatus.textContent = 'Error: ' + (error.message || 'Could not load report');
         }
     }
+    
+// Add this to the initialization code
+// Simplified initialization function that works without createAuthoring
+async function initVisualizationPage() {
+    if (!reportObj) return;
+    
+    try {
+        // Get all pages
+        const pages = await reportObj.getPages();
+        console.log("Available pages:", pages.map(p => p.name));
+        
+        // Check if there's a designated visualization page
+        visualizationPage = pages.find(page => page.name === "Visualizations");
+        
+        if (!visualizationPage) {
+            // Just use the first page
+            visualizationPage = pages[0];
+            console.log("Using first page as visualization page:", visualizationPage.name);
+        }
+        
+        // Check for existing visuals
+        try {
+            const visuals = await visualizationPage.getVisuals();
+            console.log("Visuals on visualization page:", visuals);
+            
+            if (visuals && visuals.length > 0) {
+                defaultVisual = visuals[0];
+                window.lastCreatedVisual = defaultVisual;
+                console.log("Using existing visual as default:", defaultVisual.name);
+            }
+        } catch (visualsError) {
+            console.error("Error getting visuals:", visualsError);
+        }
+    } catch (error) {
+        console.error("Error initializing visualization page:", error);
+    }
+}
+    
+    // Function to create a default visual
+    async function createDefaultVisual() {
+        try {
+            if (!visualizationPage) return;
+            
+            console.log("Creating default visual...");
+            
+            try {
+                // Try to create a visual using the standard API
+                const response = await visualizationPage.createVisual('clusteredColumnChart');
+                defaultVisual = response.visual;
+                
+                // Add some default data
+                try {
+                    const sampleCategoryField = { 
+                        column: 'Item', 
+                        table: 'sales', 
+                        schema: 'http://powerbi.com/product/schema#column' 
+                    };
+                    
+                    await defaultVisual.addDataField('Category', sampleCategoryField);
+                    
+                    const sampleValueField = { 
+                        measure: 'SUM([Quantity])', 
+                        table: 'sales', 
+                        schema: 'http://powerbi.com/product/schema#measure' 
+                    };
+                    
+                    await defaultVisual.addDataField('Y', sampleValueField);
+                    
+                    console.log("Default visual data fields added");
+                } catch (dataError) {
+                    console.error("Error adding data fields to default visual:", dataError);
+                }
+                
+                console.log("Default visual created:", defaultVisual);
+            } catch (createError) {
+                console.error("Error creating default visual:", createError);
+                
+                // If we can't create a visual, we'll try an alternative approach
+                // in updateVisualization function when needed
+            }
+        } catch (error) {
+            console.error("Error in createDefaultVisual:", error);
+        }
+    }
+    
+    // Function to manually create a visual (called from the UI)
+// Function to manually create a visual using alternative methods
+// Function to manually create a visual (called from the UI)
+async function createManualVisual() {
+    try {
+        if (!reportObj) {
+            alert("Report is not loaded yet. The visualizations may not work fully with the current embedding configuration.");
+            return;
+        }
+        
+        // Get all pages
+        let pages = [];
+        try {
+            pages = await reportObj.getPages();
+            console.log("Available pages:", pages.map(p => p.name));
+        } catch (pagesError) {
+            console.error("Error getting pages:", pagesError);
+            alert("Could not get report pages. The current embedding configuration may not support visual creation.");
+            return;
+        }
+        
+        if (!pages || pages.length === 0) {
+            alert("No pages found in the report.");
+            return;
+        }
+        
+        // Use the active page
+        const activePage = pages.filter(page => page.isActive)[0] || pages[0];
+        console.log("Using page:", activePage.name);
+        
+        // First check if we can modify this page
+        try {
+            await activePage.setActive();
+            
+            // Check for existing visuals
+            let existingVisuals = [];
+            try {
+                existingVisuals = await activePage.getVisuals();
+                console.log("Existing visuals:", existingVisuals);
+                
+                if (existingVisuals && existingVisuals.length > 0) {
+                    defaultVisual = existingVisuals[0];
+                    window.lastCreatedVisual = defaultVisual;
+                    visualizationPage = activePage;
+                    
+                    console.log("Using existing visual:", defaultVisual.name);
+                    alert("Found an existing visual! The chat should now be able to update this visual with data visualizations.");
+                    return;
+                }
+            } catch (visualsError) {
+                console.error("Error getting visuals:", visualsError);
+            }
+            
+            // Try direct creation if available
+            try {
+                console.log("Trying direct visual creation...");
+                
+                const response = await activePage.createVisual('columnChart');
+                const newVisual = response.visual;
+                
+                // Try to add some data fields that should work with most datasets
+                try {
+                    // We'll try a few common field names that might exist in the dataset
+                    const possibleCategoryColumns = [
+                        { name: 'Item', table: 'sales' },
+                        { name: 'Product', table: 'products' },
+                        { name: 'Category', table: 'products' },
+                        { name: 'CustomerName', table: 'sales' },
+                        { name: 'OrderDate', table: 'sales' },
+                        { name: 'Region', table: 'Geo' }
+                    ];
+                    
+                    const possibleValueColumns = [
+                        { name: 'Quantity', table: 'sales' },
+                        { name: 'UnitPrice', table: 'sales' },
+                        { name: 'SalesAmount', table: 'sales' },
+                        { name: 'Revenue', table: 'sales' },
+                        { name: 'Total Units', table: 'SalesFact' },
+                        { name: 'Total VanArsdel Units', table: 'SalesFact' }
+                    ];
+                    
+                    // Try each possible category column
+                    let categoryAdded = false;
+                    for (const col of possibleCategoryColumns) {
+                        if (categoryAdded) break;
+                        
+                        try {
+                            const categoryField = { 
+                                column: col.name, 
+                                table: col.table, 
+                                schema: 'http://powerbi.com/product/schema#column' 
+                            };
+                            
+                            await newVisual.addDataField('Category', categoryField);
+                            console.log(`Added category field: ${col.table}.${col.name}`);
+                            categoryAdded = true;
+                        } catch (error) {
+                            console.log(`Could not add category ${col.table}.${col.name}:`, error.message);
+                        }
+                    }
+                    
+                    // Try each possible value column
+                    let valueAdded = false;
+                    for (const col of possibleValueColumns) {
+                        if (valueAdded) break;
+                        
+                        try {
+                            const valueField = { 
+                                measure: col.name, 
+                                table: col.table, 
+                                schema: 'http://powerbi.com/product/schema#measure' 
+                            };
+                            
+                            await newVisual.addDataField('Y', valueField);
+                            console.log(`Added value field: ${col.table}.${col.name}`);
+                            valueAdded = true;
+                        } catch (error) {
+                            try {
+                                // Try with SUM if direct measure doesn't work
+                                const sumValueField = { 
+                                    measure: `SUM([${col.name}])`, 
+                                    table: col.table, 
+                                    schema: 'http://powerbi.com/product/schema#measure' 
+                                };
+                                
+                                await newVisual.addDataField('Y', sumValueField);
+                                console.log(`Added sum value field: SUM(${col.table}.${col.name})`);
+                                valueAdded = true;
+                            } catch (sumError) {
+                                console.log(`Could not add value ${col.table}.${col.name}:`, error.message);
+                            }
+                        }
+                    }
+                    
+                    if (categoryAdded && valueAdded) {
+                        alert("Visual created successfully!");
+                        
+                        // Save the visual for later use
+                        defaultVisual = newVisual;
+                        window.lastCreatedVisual = newVisual;
+                        
+                        // Update the visualization page
+                        visualizationPage = activePage;
+                    } else {
+                        alert("Visual created, but couldn't add all data fields. You may need to manually configure it.");
+                    }
+                    
+                } catch (dataError) {
+                    console.error("Error adding data to visual:", dataError);
+                    alert("Visual created, but couldn't add data. You may need to manually configure it.");
+                }
+                
+                return;
+                
+            } catch (createError) {
+                console.error("Error creating visual:", createError);
+                
+                // Try operations API as a fallback
+                try {
+                    console.log("Trying operations API...");
+                    
+                    await reportObj.executeOperation({
+                        name: 'CreateVisual',
+                        pageName: activePage.name,
+                        visualName: 'chatVisual',
+                        layout: {
+                            x: 100,
+                            y: 100,
+                            width: 400,
+                            height: 300
+                        },
+                        visualType: 'columnChart'
+                    });
+                    
+                    alert("Visual created using alternative method. You can now use the chat to create visualizations.");
+                    
+                    // Check if we can now find it
+                    try {
+                        const updatedVisuals = await activePage.getVisuals();
+                        if (updatedVisuals && updatedVisuals.length > existingVisuals.length) {
+                            defaultVisual = updatedVisuals[updatedVisuals.length - 1];
+                            window.lastCreatedVisual = defaultVisual;
+                            visualizationPage = activePage;
+                            console.log("Found newly created visual");
+                        }
+                    } catch (checkError) {
+                        console.error("Error checking for new visual:", checkError);
+                    }
+                    
+                    return;
+                    
+                } catch (operationsError) {
+                    console.error("Operations API error:", operationsError);
+                    alert("Could not create a visual. Your embedding configuration may not support visual creation.");
+                }
+            }
+            
+        } catch (pageError) {
+            console.error("Error working with page:", pageError);
+            alert("Could not modify the report page. Please check your embedding permissions.");
+        }
+        
+    } catch (error) {
+        console.error("Error in createManualVisual:", error);
+        alert("Error: " + error.message);
+    }
+}
+
 
 
     // Helper to add messages to chat
@@ -180,7 +473,6 @@ document.addEventListener('DOMContentLoaded', function() {
         chatContainer.scrollTop = chatContainer.scrollHeight;
         return messageElement;
     }
-
 
     // Helper to add a table to display query results
     function addResultTable(chatContainer, queryResults) {
@@ -352,7 +644,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-
     // Add loading indicator to chat
     function addLoadingIndicator(chatContainer) {
         const loadingElement = document.createElement('div');
@@ -369,8 +660,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return loadingElement;
     }
 
-
-    // Process Power BI filter chat message
+    // Process Power BI filter chat message and handle visualization requests
     async function processPBIFilterMessage(message) {
         if (pbiWaitingForResponse) return;
        
@@ -382,14 +672,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 return "The Power BI report is not yet loaded. Please wait a moment.";
             }
            
-            // Call the backend API to process the filter
+            // Call the backend API to process the filter/visualization request
             const response = await fetch('/api/pbi-filter', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ 
+                    message,
+                    sessionId: currentSessionId // Include session ID if available for RLS
+                })
             });
+            
             // Handle various HTTP errors
             if (!response.ok) {
                 if (response.status === 404) {
@@ -403,8 +697,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             const data = await response.json();
            
+            // Track if we've made changes
+            let changesApplied = false;
+            let visualCreated = false;
+            
             // Apply filters to the report if available
-            if (reportLoaded && data.filters && data.filters.length > 0) {
+            if (data.filters && data.filters.length > 0) {
                 try {
                     // Convert to Power BI format
                     const pbiFilters = data.filters.map(filter => {
@@ -423,6 +721,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         // If we have a real report object, apply the filters
                         await reportObj.setFilters(pbiFilters);
                         console.log('Applied filters:', pbiFilters);
+                        changesApplied = true;
                     } else {
                         // In development mode, just log
                         console.log('Development mode - would apply filters:', pbiFilters);
@@ -436,16 +735,93 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (reportObj) {
                     await reportObj.removeFilters();
                     console.log('Cleared all filters');
+                    changesApplied = true;
                 } else {
                     console.log('Development mode - would clear all filters');
                 }
             }
            
-            // Return explanation to display
-            return data.explanation || "I processed your request.";
+            // Handle visualization if available
+            if (data.visualization) {
+                try {
+                    console.log('Visualization request detected:', data.visualization);
+                    
+                    // Request visualization data from server
+                    const vizDataResponse = await fetch('/api/visualization-data', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            visualization: data.visualization,
+                            rlsUsername: data.rlsUsername
+                        })
+                    });
+                    
+                    if (!vizDataResponse.ok) {
+                        throw new Error(`Error fetching visualization data: ${vizDataResponse.status}`);
+                    }
+                    
+                    const vizData = await vizDataResponse.json();
+                    
+                    // Find this part in processPBIFilterMessage function
+if (vizData.success && vizData.queryResults) {
+    // Check if we're in development mode or have a real report
+    if (reportObj) {
+        // Create or update visualization using the data
+        const result = await createOrUpdateVisualization(
+            reportObj, 
+            data.visualization, 
+            vizData.queryResults
+        );
+        
+        if (result.success) {
+            visualCreated = true;
+            changesApplied = true;
+            
+            // If it was only partially successful, add the result message to the explanation
+            if (result.partial && result.message) {
+                return `${data.explanation}\n\n(Note: ${result.message})`;
+            }
+        } else if (result.error) {
+            console.error('Error creating visualization:', result.error);
+            
+            // Return explanation and show the data anyway
+            return `${data.explanation}\n\n(Note: I've analyzed the data, but couldn't create a visualization in the report. The embedding configuration may have limited visual capabilities.)`;
+        }
+    } else {
+        // In development mode, show the visualization data
+        console.log('Development mode - visualization data:', vizData.queryResults);
+        
+        // Create a visual representation of the data in the chat
+        const vizElement = createVisualDataPreview(vizData.queryResults, data.visualization);
+        elements.pbiMessages.appendChild(vizElement);
+        elements.pbiMessages.scrollTop = elements.pbiMessages.scrollHeight;
+        visualCreated = true;
+    }
+} else {
+    console.error('Error with visualization data:', vizData.error || 'Unknown error');
+    return `${data.explanation} (Note: I couldn't get the data for the visualization. ${vizData.error || ''})`;
+}
+                } catch (vizError) {
+                    console.error('Error processing visualization:', vizError);
+                    return `${data.explanation} (Note: There was an error creating the visualization: ${vizError.message})`;
+                }
+            }
+            
+            // Return appropriate explanation based on what was done
+            if (visualCreated && changesApplied) {
+                return `${data.explanation}`;
+            } else if (visualCreated) {
+                return `${data.explanation}`;
+            } else if (changesApplied) {
+                return data.explanation || "I processed your request and applied the filters.";
+            } else {
+                return data.explanation || "I processed your request, but no changes were needed.";
+            }
         } catch (error) {
-            console.error('Error processing PBI filter:', error);
-            return `Error: ${error.message || 'An unknown error occurred while processing your filter request.'}`;
+            console.error('Error processing PBI filter/visualization:', error);
+            return `Error: ${error.message || 'An unknown error occurred while processing your request.'}`;
         } finally {
             // Remove loading indicator
             if (loadingIndicator && loadingIndicator.parentNode) {
@@ -455,6 +831,249 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Helper function to create or update a visualization in the report
+// Also update the createOrUpdateVisualization function to use authoring page
+// Updated createOrUpdateVisualization function for alternative approach
+// Simplified function to work with existing visuals
+// Final version that doesn't use addDataField at all
+async function createOrUpdateVisualization(report, vizConfig, vizData) {
+    try {
+        if (!report || !vizConfig || !vizData) {
+            return { success: false, error: 'Missing required parameters' };
+        }
+        
+        // If we have a saved visual reference, use it
+        if (window.lastCreatedVisual) {
+            defaultVisual = window.lastCreatedVisual;
+        }
+        
+        // If we have a visual to work with
+        if (defaultVisual) {
+            console.log("Using existing visual for update:", defaultVisual);
+            
+            try {
+                // Try to update visual using updateSettings if available
+                try {
+                    await defaultVisual.updateSettings({
+                        general: {
+                            formatString: vizConfig.title || `${vizConfig.type} chart`,
+                            visible: true,
+                            displayName: true
+                        }
+                    });
+                    console.log("Updated visual settings");
+                } catch (settingsError) {
+                    console.log("Could not update visual settings:", settingsError);
+                }
+                
+                // Try to set visual properties if available
+                try {
+                    const properties = {
+                        general: {
+                            formatString: vizConfig.title || `${vizConfig.type} chart`,
+                            visible: true,
+                            displayName: true
+                        }
+                    };
+                    
+                    await defaultVisual.setProperties(properties);
+                    console.log("Set visual properties");
+                } catch (propertiesError) {
+                    console.log("Could not set visual properties:", propertiesError);
+                }
+                
+                // Try operations API as a last resort
+                try {
+                    await report.executeOperation({
+                        name: 'SetVisualDisplayState',
+                        visualName: defaultVisual.name,
+                        displayState: 'visible'
+                    });
+                    console.log("Made visual visible using operations API");
+                } catch (operationError) {
+                    console.log("Could not use operations API:", operationError);
+                }
+                
+                // Even if we couldn't update the visual, return success
+                // This will let the chat continue to provide useful information
+                return { 
+                    success: true, 
+                    partial: true, 
+                    message: "The visualization data is shown in text format because your embedding configuration has limited visualization capabilities." 
+                };
+                
+            } catch (updateError) {
+                console.error("Error working with visual:", updateError);
+                
+                // Still return partial success so the user gets the data even if visualization fails
+                return { 
+                    success: true, 
+                    partial: true, 
+                    message: "Visualization not fully supported in current configuration, but I've processed your data."
+                };
+            }
+        }
+        
+        // If we don't have a visual to work with, return success but explain the limitations
+        // This will ensure the user still gets the data and explanation
+        return { 
+            success: true, 
+            partial: true, 
+            message: "Your embedding configuration doesn't support creating visuals, but I've processed the data for you."
+        };
+        
+    } catch (error) {
+        console.error("General error in createOrUpdateVisualization:", error);
+        
+        // Return partial success so the user still gets data even if visualization fails
+        return { 
+            success: true, 
+            partial: true, 
+            message: "Visualization features are limited, but I've processed your data request."
+        };
+    }
+}
+
+// Helper function to map visualization types
+function mapVisualizationType(type) {
+    const typeMap = {
+        'bar': 'barChart',
+        'column': 'columnChart',
+        'line': 'lineChart',
+        'pie': 'pieChart',
+        'scatter': 'scatterChart',
+        'area': 'areaChart',
+        'donut': 'donutChart',
+        'table': 'tableEx'
+    };
+    
+    return typeMap[type.toLowerCase()] || 'columnChart';
+}
+
+    // Helper to create visual properties from config
+    function createVisualPropertiesFromConfig(vizConfig, vizData) {
+        // Default properties based on visualization type
+        let properties = {
+            general: {
+                formatString: vizConfig.title || `Generated ${vizConfig.type} chart`,
+                displayName: true
+            },
+            categoryAxis: {
+                show: true
+            },
+            valueAxis: {
+                show: true
+            },
+            legend: {
+                show: true,
+                position: 'Right'
+            }
+        };
+        
+        // Customize properties based on visualization type
+        switch (vizConfig.type.toLowerCase()) {
+            case 'column':
+            case 'bar':
+                properties.legend.show = false;
+                break;
+                
+            case 'pie':
+            case 'donut':
+                properties.legend.position = 'Bottom';
+                break;
+                
+            case 'scatter':
+                properties.bubbleSize = {
+                    show: true
+                };
+                break;
+        }
+        
+        // Map data roles to visual properties
+        if (vizConfig.dataRoles && vizConfig.dataRoles.length > 0) {
+            properties.dataRoles = vizConfig.dataRoles.map(role => {
+                return {
+                    name: role.name,
+                    displayName: role.column,
+                    kind: role.name === 'category' ? 'Grouping' : 'Measure'
+                };
+            });
+        }
+        
+        return properties;
+    }
+
+    // For development mode - create a visual representation of data in the chat
+    function createVisualDataPreview(queryResults, vizConfig) {
+        const previewElement = document.createElement('div');
+        previewElement.classList.add('message', 'assistant', 'visual-preview');
+        
+        // Create a title for the visualization
+        const titleElement = document.createElement('h4');
+        titleElement.textContent = vizConfig.title || `${vizConfig.type.charAt(0).toUpperCase() + vizConfig.type.slice(1)} Chart`;
+        previewElement.appendChild(titleElement);
+        
+        // Add info about what this is
+        const infoText = document.createElement('p');
+        infoText.innerHTML = `<small><em>Development mode: Visualization preview (in production this would create a ${vizConfig.type} chart in the report)</em></small>`;
+        previewElement.appendChild(infoText);
+        
+        // Add the data preview
+        if (queryResults && queryResults.tables && queryResults.tables.length > 0) {
+            const table = document.createElement('table');
+            table.classList.add('results-table');
+            
+            // Add headers
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            
+            // Get column names
+            const columns = queryResults.tables[0].columns;
+            columns.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column.name;
+                headerRow.appendChild(th);
+            });
+            
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Add data rows
+            const tbody = document.createElement('tbody');
+            const rows = queryResults.tables[0].rows;
+            
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                // Add each cell value
+                row.forEach((value, index) => {
+                    const td = document.createElement('td');
+                    
+                    // Format the value based on column type
+                    if (typeof value === 'number') {
+                        td.textContent = value.toLocaleString();
+                    } else if (value === null) {
+                        td.innerHTML = '<em>N/A</em>';
+                    } else {
+                        td.textContent = value;
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                
+                tbody.appendChild(tr);
+            });
+            
+            table.appendChild(tbody);
+            previewElement.appendChild(table);
+        } else {
+            const noDataMessage = document.createElement('p');
+            noDataMessage.textContent = 'No data available for this visualization.';
+            previewElement.appendChild(noDataMessage);
+        }
+        
+        return previewElement;
+    }
 
     // Process Azure OpenAI chat message - Modified to handle semantic model query results
     async function processOpenAIMessage(message) {
@@ -487,7 +1106,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ message })
+                body: JSON.stringify({ 
+                    message,
+                    sessionId: currentSessionId // Include session ID for RLS if available
+                })
             });
             
             // Clear the timeout since we got a response
@@ -555,80 +1177,133 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-
-    // Event Listeners
-   
-    // Toggle Filter Pane Button
-    const toggleFilterPaneBtn = document.getElementById('toggle-filter-pane');
-    if (toggleFilterPaneBtn) {
-        toggleFilterPaneBtn.addEventListener('click', function() {
-            toggleFilterPane();
-        });
-    }
-   
-    // PBI Filter Chat
-    elements.pbiSendBtn.addEventListener('click', async function() {
-        const message = elements.pbiInput.value.trim();
-        if (!message || pbiWaitingForResponse) return;
-       
-        // Add user message to chat
-        addMessage(elements.pbiMessages, message, 'user');
-        elements.pbiInput.value = '';
-       
-        // Process message and get response
-        const response = await processPBIFilterMessage(message);
-       
-        // Add assistant response to chat
-        if (response) {
-            addMessage(elements.pbiMessages, response, 'assistant');
-        }
-    });
-
-
-    elements.pbiInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter' && !pbiWaitingForResponse) {
-            elements.pbiSendBtn.click();
-        }
-    });
-
-
-    // Azure OpenAI Chat
-    elements.openaiSendBtn.addEventListener('click', async function() {
-        const message = elements.openaiInput.value.trim();
-        if (!message || openaiWaitingForResponse) return;
-       
-        // Add user message to chat
-        addMessage(elements.openaiMessages, message, 'user');
-        elements.openaiInput.value = '';
-       
-        // Process message and get response
-        const response = await processOpenAIMessage(message);
-       
-        // Add assistant response to chat
-        if (response) {
-            addMessage(elements.openaiMessages, response, 'assistant');
-        }
-    });
-
-
-    elements.openaiInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter' && !openaiWaitingForResponse) {
-            elements.openaiSendBtn.click();
-        }
-    });
-
-
-    // Initialize the app
+    // Function to initialize the app
     function init() {
         // Initialize Power BI report
         initPowerBIReport();
         
         // Check if Power BI Semantic Model is configured
         checkSemanticModelStatus();
+        
+        // Update chat welcome messages to include visualization capabilities
+        updatePBIFilterWelcomeMessage();
+        
+        // Set up event listeners for visualization tools
+        setupVisualizationToggle();
+        
+        // Set up the Create Visual button
+        // Set up the Create Visual button
+if (elements.createVisualBtn) {
+    elements.createVisualBtn.addEventListener('click', createManualVisual);
+    elements.createVisualBtn.disabled = true; // Initially disabled until report loads
+}
     }
-   
-    // Removed Azure AI Search check as it's no longer needed
-    
+
+    // Function to update PBI Filter chat welcome message
+    function updatePBIFilterWelcomeMessage() {
+        const welcomeMessage = document.querySelector('#pbi-messages .message.system');
+        if (welcomeMessage) {
+            welcomeMessage.textContent = 'Hello! I can help you filter and visualize data from the Power BI report. Try saying "Show me sales for the last quarter" or "Create a bar chart of sales by product category".';
+        }
+    }
+
+    // Set up event listener for the toggle visualization button
+    function setupVisualizationToggle() {
+        const toggleVisualBtn = document.getElementById('toggle-visual-pane');
+        if (toggleVisualBtn) {
+            toggleVisualBtn.addEventListener('click', function() {
+                if (!reportObj) {
+                    alert('Report is not yet loaded. Please wait and try again.');
+                    return;
+                }
+                
+                // Check if visualization page exists
+                if (visualizationPage) {
+                    // Switch to visualization page
+                    visualizationPage.setActive()
+                        .then(() => {
+                            console.log('Switched to visualization page');
+                        })
+                        .catch(error => {
+                            console.error('Error switching to visualization page:', error);
+                            alert('Could not switch to the visualization page. Please check permissions.');
+                        });
+                } else {
+                    // Toggle between views (could be customized based on your needs)
+                    reportObj.getPages().then(pages => {
+                        if (!pages || pages.length === 0) return;
+                        
+                        const activePage = pages.filter(page => page.isActive)[0] || pages[0];
+                        
+                        // Get existing visuals
+                        activePage.getVisuals().then(visuals => {
+                            if (!visuals || visuals.length === 0) {
+                                alert('No visuals found on this page.');
+                                return;
+                            }
+                            
+                            // Simple toggle of first visual for demonstration
+                            const firstVisual = visuals[0];
+                            
+                            // Get current visibility
+                            firstVisual.getProperties().then(props => {
+                                const isVisible = !(props.general && props.general.visible === false);
+                                
+                                // Toggle visibility
+                                firstVisual.setProperties({
+                                    general: {
+                                        visible: !isVisible
+                                    }
+                                }).then(() => {
+                                    console.log(`Visual ${isVisible ? 'hidden' : 'shown'}`);
+                                }).catch(error => {
+                                    console.error('Error toggling visual:', error);
+                                });
+                            }).catch(error => {
+                                console.error('Error getting visual properties:', error);
+                            });
+                        }).catch(error => {
+                            console.error('Error getting visuals:', error);
+                        });
+                    }).catch(error => {
+                        console.error('Error getting report pages:', error);
+                    });
+                }
+            });
+        }
+    }
+
+    // Add a helper function for session management
+    function setUserIdentity(username, roles = [], customData = {}) {
+        return new Promise((resolve, reject) => {
+            fetch('/api/set-user-identity', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, roles, customData })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status} - ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                currentSessionId = data.sessionId;
+                console.log('User identity set:', data);
+                resolve(data);
+            })
+            .catch(error => {
+                console.error('Error setting user identity:', error);
+                reject(error);
+            });
+        });
+    }
+
+    // Expose the identity function globally
+    window.setUserIdentity = setUserIdentity;
+
     // Function to check if Power BI Semantic Model is configured
     async function checkSemanticModelStatus() {
         try {
@@ -664,10 +1339,64 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Event Listeners
+   
+    // Toggle Filter Pane Button
+    const toggleFilterPaneBtn = document.getElementById('toggle-filter-pane');
+    if (toggleFilterPaneBtn) {
+        toggleFilterPaneBtn.addEventListener('click', function() {
+            toggleFilterPane();
+        });
+    }
+   
+    // PBI Filter Chat
+    elements.pbiSendBtn.addEventListener('click', async function() {
+        const message = elements.pbiInput.value.trim();
+        if (!message || pbiWaitingForResponse) return;
+       
+        // Add user message to chat
+        addMessage(elements.pbiMessages, message, 'user');
+        elements.pbiInput.value = '';
+       
+        // Process message and get response
+        const response = await processPBIFilterMessage(message);
+       
+        // Add assistant response to chat
+        if (response) {
+            addMessage(elements.pbiMessages, response, 'assistant');
+        }
+    });
+
+    elements.pbiInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !pbiWaitingForResponse) {
+            elements.pbiSendBtn.click();
+        }
+    });
+
+    // Azure OpenAI Chat
+    elements.openaiSendBtn.addEventListener('click', async function() {
+        const message = elements.openaiInput.value.trim();
+        if (!message || openaiWaitingForResponse) return;
+       
+        // Add user message to chat
+        addMessage(elements.openaiMessages, message, 'user');
+        elements.openaiInput.value = '';
+       
+        // Process message and get response
+        const response = await processOpenAIMessage(message);
+       
+        // Add assistant response to chat
+        if (response) {
+            addMessage(elements.openaiMessages, response, 'assistant');
+        }
+    });
+
+    elements.openaiInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !openaiWaitingForResponse) {
+            elements.openaiSendBtn.click();
+        }
+    });
 
     // Start the app
     init();
 });
-
-
-

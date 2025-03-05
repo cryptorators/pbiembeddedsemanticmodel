@@ -449,5 +449,94 @@ body {
     animation: fade-in 0.3s ease-out;
 }
 
+/* Visual preview styling */
+.visual-preview {
+    max-width: 95% !important;
+    background-color: #f8fbff;
+    border-left: 3px solid #007bff;
+    padding: 12px !important;
+}
 
+.visual-preview h4 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    color: #1a3a78;
+}
 
+.visual-preview p {
+    margin: 5px 0;
+    color: #555;
+}
+
+.visual-preview small {
+    font-size: 0.8rem;
+    color: #777;
+}
+
+/* Visualization success message styling */
+.visualization-success {
+    background-color: #f0f9ff;
+    border-left: 3px solid #0078d4;
+    position: relative;
+    padding-left: 30px !important;
+}
+
+.visualization-success::before {
+    content: "✓";
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 16px;
+    color: #0078d4;
+    font-weight: bold;
+}
+
+/* Animation for visualization appearance */
+@keyframes pop-in {
+    0% { transform: scale(0.9); opacity: 0; }
+    70% { transform: scale(1.05); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.visual-preview {
+    animation: pop-in 0.4s ease-out forwards;
+}
+
+/* Add this to your public/styles.css file */
+
+.create-visual-button {
+    background-color: #28a745;
+}
+
+.create-visual-button:hover {
+    background-color: #218838;
+}
+
+.create-visual-button:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.action-button {
+    margin-right: 8px;
+}
+
+.create-visual-button {
+    background-color: #28a745;
+}
+
+.create-visual-button:hover {
+    background-color: #218838;
+}
+
+.create-visual-button:disabled {
+    background-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+.action-button {
+    margin-right: 8px;
+}

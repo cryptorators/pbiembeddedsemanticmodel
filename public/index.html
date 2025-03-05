@@ -12,10 +12,13 @@
     <div class="app-container">
         <!-- Left side: Power BI Report -->
         <div class="report-container">
+            <!-- Add this to your public/index.html file, replacing the existing report-header section -->
             <div class="report-header">
                 <h2>Power BI Report</h2>
                 <div class="report-actions">
                     <button id="toggle-filter-pane" class="action-button">Toggle Filter Pane</button>
+                    <button id="toggle-visual-pane" class="action-button">Toggle Visuals</button>
+                    <button id="create-visual-btn" class="action-button create-visual-button" disabled>Create Sample Visual</button>
                     <span class="report-status">Loading...</span>
                 </div>
             </div>
@@ -26,16 +29,16 @@
             <!-- PBI Filter Chat -->
             <div class="chat-box">
                 <div class="chat-header">
-                    <h3>PBI Filter Assistant</h3>
+                    <h3>PBI Filter & Visualization Assistant</h3>
                     <p>Ask to filter or visualize data from the report</p>
                 </div>
                 <div class="chat-messages" id="pbi-messages">
                     <div class="message system">
-                        Hello! I can help you filter and explore the Power BI report. Try saying "Show me sales for the last quarter" or "Filter to the top 5 products".
+                        Hello! I can help you filter and visualize data from the Power BI report. Try saying "Show me sales for the last quarter" or "Create a bar chart of sales by product category".
                     </div>
                 </div>
                 <div class="chat-input-container">
-                    <input type="text" id="pbi-input" placeholder="Ask about filtering the report...">
+                    <input type="text" id="pbi-input" placeholder="Ask about filtering or visualizing the report...">
                     <button id="pbi-send">Send</button>
                 </div>
             </div>
@@ -60,6 +63,3 @@
     <script src="app.js"></script>
 </body>
 </html>
-
-
-
