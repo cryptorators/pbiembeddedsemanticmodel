@@ -256,7 +256,6 @@ async function initVisualizationPage() {
     
     // Function to manually create a visual (called from the UI)
 // Function to manually create a visual using alternative methods
-// Function to manually create a visual (called from the UI)
 async function createManualVisual() {
     try {
         if (!reportObj) {
@@ -462,8 +461,6 @@ async function createManualVisual() {
     }
 }
 
-
-
     // Helper to add messages to chat
     function addMessage(chatContainer, text, type) {
         const messageElement = document.createElement('div');
@@ -660,6 +657,628 @@ async function createManualVisual() {
         return loadingElement;
     }
 
+    // Create chart visualization function
+    function createChartVisualization(container, vizConfig, queryResults) {
+        // Check if Chart.js is loaded
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js library is not loaded!');
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'message assistant error-message';
+            errorMsg.textContent = 'Visualization library is not loaded. Please make sure Chart.js is included in your page.';
+            container.appendChild(errorMsg);
+            return errorMsg;
+        }
+        
+        if (!queryResults || !queryResults.tables || queryResults.tables.length === 0) {
+            console.error('No data available for visualization');
+            return null;
+        }
+        
+        try {
+            // Create a visualization container
+            const vizContainer = document.createElement('div');
+            vizContainer.className = 'chat-visualization';
+            
+            // Create a title for the visualization
+            const titleElement = document.createElement('h4');
+            titleElement.className = 'viz-title';
+            titleElement.textContent = vizConfig.title || `${capitalizeFirst(vizConfig.type)} Chart`;
+            vizContainer.appendChild(titleElement);
+            
+            // Create canvas for the chart
+            const visualizationWrapper = document.createElement('div');
+            visualizationWrapper.className = 'chart-wrapper';
+            visualizationWrapper.style.position = 'relative';
+            visualizationWrapper.style.height = '300px';
+            visualizationWrapper.style.width = '100%';
+                
+            const canvas = document.createElement('canvas');
+            canvas.id = 'chart-' + Date.now(); // Unique ID
+            canvas.className = 'chat-chart';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            visualizationWrapper.appendChild(canvas);
+            vizContainer.appendChild(visualizationWrapper);
+            
+            // Extract data from queryResults
+            const table = queryResults.tables[0];
+            const labels = [];
+            const datasets = [];
+            
+            // Process data based on the structure
+            if (table.rows && table.rows.length > 0) {
+                // Log the data structure to debug
+                console.log('Table rows format:', table.rows);
+                console.log('First row type:', typeof table.rows[0]);
+                console.log('First row structure:', table.rows[0]);
+                
+                // Determine if we have column headers or need to generate them
+                const hasColumnHeaders = table.columns && table.columns.length > 0;
+                let columnNames = [];
+                
+                // Handle column names based on what's available
+                if (hasColumnHeaders) {
+                    // Use column headers from the data
+                    columnNames = table.columns.map(col => col.name || col);
+                } else if (Array.isArray(table.rows[0])) {
+                    // If the first row is an array, generate column names
+                    columnNames = table.rows[0].map((_, i) => `Series ${i+1}`);
+                } else if (typeof table.rows[0] === 'object' && table.rows[0] !== null) {
+                    // If the first row is an object, use its keys
+                    columnNames = Object.keys(table.rows[0]);
+                } else {
+                    // Fallback to generic column names
+                    columnNames = ['Category', 'Value'];
+                }
+                
+                // Process rows into datasets based on structure
+                // Handle different row formats (array vs object)
+                if (Array.isArray(table.rows[0])) {
+                    // Row is an array format
+                    if (table.rows[0].length >= 2) {
+                        // Multi-column data: first column for labels, rest for data series
+                        
+                        // Get labels from first column
+                        table.rows.forEach(row => {
+                            const label = formatChartValue(row[0]);
+                            labels.push(label);
+                        });
+                        
+                        // Create datasets for each data column
+                        for (let i = 1; i < (columnNames.length > 1 ? columnNames.length : table.rows[0].length); i++) {
+                            const data = table.rows.map(row => row[i]);
+                            
+                            // Generate a color based on the index
+                            const hue = (i * 137) % 360; // Golden angle in degrees
+                            const color = `hsl(${hue}, 70%, 60%)`;
+                            const borderColor = `hsl(${hue}, 70%, 45%)`;
+                            
+                            datasets.push({
+                                label: columnNames[i] || `Series ${i}`,
+                                data: data,
+                                backgroundColor: color,
+                                borderColor: borderColor,
+                                borderWidth: 1
+                            });
+                        }
+                    } else {
+                        // Single value array
+                        // Use row index as category and the value as data
+                        table.rows.forEach((row, i) => {
+                            labels.push(`Item ${i+1}`);
+                        });
+                        
+                        const data = table.rows.map(row => row[0]);
+                        
+                        // Generate colors for each bar/slice
+                        const colors = labels.map((_, i) => {
+                            const hue = (i * 137) % 360;
+                            return `hsl(${hue}, 70%, 60%)`;
+                        });
+                        
+                        datasets.push({
+                            label: columnNames[0] || 'Value',
+                            data: data,
+                            backgroundColor: colors,
+                            borderColor: colors.map(color => color.replace('60%', '45%')),
+                            borderWidth: 1
+                        });
+                    }
+                } else if (typeof table.rows[0] === 'object' && table.rows[0] !== null) {
+                    // Row is an object format with properties
+                    // Get property names
+                    const propertyNames = Object.keys(table.rows[0]);
+                    
+                    if (propertyNames.length >= 2) {
+                        // Multi-property objects
+                        // Use first property as category, the rest as series
+                        const categoryProp = propertyNames[0];
+                        
+                        // Extract labels from the first property
+                        table.rows.forEach(row => {
+                            labels.push(formatChartValue(row[categoryProp]));
+                        });
+                        
+                        // Create a dataset for each data property (excluding the first one used for labels)
+                        for (let i = 1; i < propertyNames.length; i++) {
+                            const propName = propertyNames[i];
+                            const data = table.rows.map(row => row[propName]);
+                            
+                            // Generate a color based on the index
+                            const hue = (i * 137) % 360;
+                            const color = `hsl(${hue}, 70%, 60%)`;
+                            const borderColor = `hsl(${hue}, 70%, 45%)`;
+                            
+                            datasets.push({
+                                label: propName,
+                                data: data,
+                                backgroundColor: color,
+                                borderColor: borderColor,
+                                borderWidth: 1
+                            });
+                        }
+                    } else if (propertyNames.length === 1) {
+                        // Single property objects
+                        // Use row index as labels
+                        const propName = propertyNames[0];
+                        
+                        table.rows.forEach((row, i) => {
+                            labels.push(`Item ${i+1}`);
+                        });
+                        
+                        const data = table.rows.map(row => row[propName]);
+                        
+                        // Generate colors for each bar/slice
+                        const colors = labels.map((_, i) => {
+                            const hue = (i * 137) % 360;
+                            return `hsl(${hue}, 70%, 60%)`;
+                        });
+                        
+                        datasets.push({
+                            label: propName || 'Value',
+                            data: data,
+                            backgroundColor: colors,
+                            borderColor: colors.map(color => color.replace('60%', '45%')),
+                            borderWidth: 1
+                        });
+                    }
+                } else {
+                    // Primitive values or unusual format
+                    // Create a simple dataset with indices as labels
+                    
+                    labels.push(...table.rows.map((_, i) => `Item ${i+1}`));
+                    const data = table.rows.map(value => 
+                        typeof value === 'object' ? JSON.stringify(value) : value
+                    );
+                    
+                    // Generate colors
+                    const colors = labels.map((_, i) => {
+                        const hue = (i * 137) % 360;
+                        return `hsl(${hue}, 70%, 60%)`;
+                    });
+                    
+                    datasets.push({
+                        label: columnNames[0] || 'Value',
+                        data: data,
+                        backgroundColor: colors,
+                        borderColor: colors.map(color => color.replace('60%', '45%')),
+                        borderWidth: 1
+                    });
+                }
+            } else {
+                // No data rows
+                const noDataMsg = document.createElement('p');
+                noDataMsg.textContent = 'No data available for visualization';
+                vizContainer.appendChild(noDataMsg);
+                container.appendChild(vizContainer);
+                return vizContainer;
+            }
+            
+            // Add chart to the container
+            container.appendChild(vizContainer);
+            
+            // Ensure data is valid
+            if (labels.length === 0 || datasets.length === 0) {
+                const noDataMsg = document.createElement('p');
+                noDataMsg.textContent = 'No data available for visualization';
+                vizContainer.appendChild(noDataMsg);
+                return vizContainer;
+            }
+            
+            // Log chart data for debugging
+            console.log('Creating chart with data:', {
+                type: mapToChartJsType(vizConfig.type),
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                }
+            });
+            
+            // Create chart configuration
+            const chartType = mapToChartJsType(vizConfig.type);
+            const chartOptions = getChartOptions(chartType, vizConfig.title);
+            
+            // Create the chart with a delay to ensure DOM is ready
+            setTimeout(() => {
+                try {
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        console.error('Could not get canvas context');
+                        return;
+                    }
+                    
+                    // Create new chart
+                    new Chart(ctx, {
+                        type: chartType,
+                        data: {
+                            labels: labels,
+                            datasets: datasets
+                        },
+                        options: chartOptions
+                    });
+                } catch (chartError) {
+                    console.error('Error creating chart:', chartError);
+                    const errorMsg = document.createElement('p');
+                    errorMsg.textContent = `Error creating chart: ${chartError.message}`;
+                    errorMsg.style.color = 'red';
+                    vizContainer.appendChild(errorMsg);
+                }
+            }, 100);
+            
+            return vizContainer;
+        } catch (error) {
+            console.error('Error creating chart visualization:', error);
+            
+            // Create a fallback message
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'message assistant error-message';
+            errorMsg.textContent = `I couldn't create the visualization due to an error: ${error.message}`;
+            container.appendChild(errorMsg);
+            
+            return errorMsg;
+        }
+    }
+
+    // Helper function to map visualization type to Chart.js type
+    function mapToChartJsType(type) {
+        const typeMap = {
+            'bar': 'bar',
+            'column': 'bar', // Chart.js bar is vertical by default
+            'line': 'line',
+            'pie': 'pie',
+            'doughnut': 'doughnut',
+            'donut': 'doughnut',
+            'scatter': 'scatter',
+            'area': 'line', // We'll configure line to be area
+            'radar': 'radar',
+            'polar': 'polarArea',
+            'bubble': 'bubble'
+        };
+        
+        return typeMap[type.toLowerCase()] || 'bar';
+    }
+
+    // Helper function to get chart options based on type
+    function getChartOptions(chartType, title) {
+        const baseOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: !!title,
+                    text: title || '',
+                    font: {
+                        size: 16
+                    }
+                },
+                legend: {
+                    display: true,
+                    position: ['pie', 'doughnut', 'polarArea'].includes(chartType) ? 'bottom' : 'top',
+                    labels: {
+                        boxWidth: 12,
+                        padding: 10
+                    }
+                },
+                tooltip: {
+                    enabled: true,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    padding: 10,
+                    cornerRadius: 4
+                }
+            },
+            animation: {
+                duration: 1000,
+                easing: 'easeOutQuart'
+            }
+        };
+        
+        // Add type-specific options
+        switch (chartType) {
+            case 'bar':
+                return {
+                    ...baseOptions,
+                    indexAxis: 'x', // Vertical bars
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                display: true,
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                };
+            
+            case 'line':
+                return {
+                    ...baseOptions,
+                    elements: {
+                        line: {
+                            tension: 0.3, // Smooth lines
+                            fill: false
+                        },
+                        point: {
+                            radius: 4,
+                            hoverRadius: 6
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    }
+                };
+                
+            case 'pie':
+            case 'doughnut':
+                return {
+                    ...baseOptions,
+                    cutout: chartType === 'doughnut' ? '50%' : undefined,
+                    plugins: {
+                        ...baseOptions.plugins,
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                padding: 15
+                            }
+                        }
+                    }
+                };
+                
+            case 'scatter':
+                return {
+                    ...baseOptions,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                };
+                
+            default:
+                return baseOptions;
+        }
+    }
+
+    // Helper function to format chart values
+    function formatChartValue(value) {
+        if (value === null || value === undefined) {
+            return 'N/A';
+        } else if (typeof value === 'number') {
+            // For large numbers, shorten them
+            if (value >= 1000000) {
+                return (value / 1000000).toFixed(1) + 'M';
+            } else if (value >= 1000) {
+                return (value / 1000).toFixed(1) + 'K';
+            }
+            return value.toString();
+        } else if (value instanceof Date) {
+            return value.toLocaleDateString();
+        } else {
+            return String(value);
+        }
+    }
+
+    // Helper function to capitalize first letter
+    function capitalizeFirst(str) {
+        return str.charAt(0).toUpperCase() + str.slice(1);
+    }
+
+    // Function to create a visual representation of data in the chat
+    function createVisualDataPreview(queryResults, vizConfig) {
+        const previewElement = document.createElement('div');
+        previewElement.classList.add('message', 'assistant', 'visual-preview');
+        
+        // Create a title for the visualization
+        const titleElement = document.createElement('h4');
+        titleElement.textContent = vizConfig.title || `${vizConfig.type.charAt(0).toUpperCase() + vizConfig.type.slice(1)} Chart`;
+        previewElement.appendChild(titleElement);
+        
+        // Add info about what this is
+        const infoText = document.createElement('p');
+        infoText.innerHTML = `<small><em>Development mode: Visualization preview (in production this would create a ${vizConfig.type} chart in the report)</em></small>`;
+        previewElement.appendChild(infoText);
+        
+        // Add the data preview
+        if (queryResults && queryResults.tables && queryResults.tables.length > 0) {
+            const table = document.createElement('table');
+            table.classList.add('results-table');
+            
+            // Add headers
+            const thead = document.createElement('thead');
+            const headerRow = document.createElement('tr');
+            
+            // Get column names
+            const columns = queryResults.tables[0].columns;
+            columns.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column.name;
+                headerRow.appendChild(th);
+            });
+            
+            thead.appendChild(headerRow);
+            table.appendChild(thead);
+            
+            // Add data rows
+            const tbody = document.createElement('tbody');
+            const rows = queryResults.tables[0].rows;
+            
+            rows.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                // Add each cell value
+                row.forEach((value, index) => {
+                    const td = document.createElement('td');
+                    
+                    // Format the value based on column type
+                    if (typeof value === 'number') {
+                        td.textContent = value.toLocaleString();
+                    } else if (value === null) {
+                        td.innerHTML = '<em>N/A</em>';
+                    } else {
+                        td.textContent = value;
+                    }
+                    
+                    tr.appendChild(td);
+                });
+                
+                tbody.appendChild(tr);
+            });
+            
+            table.appendChild(tbody);
+            previewElement.appendChild(table);
+        } else {
+            const noDataMessage = document.createElement('p');
+            noDataMessage.textContent = 'No data available for this visualization.';
+            previewElement.appendChild(noDataMessage);
+        }
+        
+        return previewElement;
+    }
+
+    // Helper function to create or update a visualization in the report
+    async function createOrUpdateVisualization(report, vizConfig, vizData) {
+        try {
+            if (!report || !vizConfig || !vizData) {
+                return { success: false, error: 'Missing required parameters' };
+            }
+            
+            // If we have a saved visual reference, use it
+            if (window.lastCreatedVisual) {
+                defaultVisual = window.lastCreatedVisual;
+            }
+            
+            // If we have a visual to work with
+            if (defaultVisual) {
+                console.log("Using existing visual for update:", defaultVisual);
+                
+                try {
+                    // Try to update visual using updateSettings if available
+                    try {
+                        await defaultVisual.updateSettings({
+                            general: {
+                                formatString: vizConfig.title || `${vizConfig.type} chart`,
+                                visible: true,
+                                displayName: true
+                            }
+                        });
+                        console.log("Updated visual settings");
+                    } catch (settingsError) {
+                        console.log("Could not update visual settings:", settingsError);
+                    }
+                    
+                    // Try to set visual properties if available
+                    try {
+                        const properties = {
+                            general: {
+                                formatString: vizConfig.title || `${vizConfig.type} chart`,
+                                visible: true,
+                                displayName: true
+                            }
+                        };
+                        
+                        await defaultVisual.setProperties(properties);
+                        console.log("Set visual properties");
+                    } catch (propertiesError) {
+                        console.log("Could not set visual properties:", propertiesError);
+                    }
+                    
+                    // Try operations API as a last resort
+                    try {
+                        await report.executeOperation({
+                            name: 'SetVisualDisplayState',
+                            visualName: defaultVisual.name,
+                            displayState: 'visible'
+                        });
+                        console.log("Made visual visible using operations API");
+                    } catch (operationError) {
+                        console.log("Could not use operations API:", operationError);
+                    }
+                    
+                    // Even if we couldn't update the visual, return success
+                    // This will let the chat continue to provide useful information
+                    return { 
+                        success: true, 
+                        partial: true, 
+                        message: "The visualization data is shown in text format because your embedding configuration has limited visualization capabilities." 
+                    };
+                    
+                } catch (updateError) {
+                    console.error("Error working with visual:", updateError);
+                    
+                    // Still return partial success so the user gets the data even if visualization fails
+                    return { 
+                        success: true, 
+                        partial: true, 
+                        message: "Visualization not fully supported in current configuration, but I've processed your data."
+                    };
+                }
+            }
+            
+            // If we don't have a visual to work with, return success but explain the limitations
+            // This will ensure the user still gets the data and explanation
+            return { 
+                success: true, 
+                partial: true, 
+                message: "Your embedding configuration doesn't support creating visuals, but I've processed the data for you."
+            };
+            
+        } catch (error) {
+            console.error("General error in createOrUpdateVisualization:", error);
+            
+            // Return partial success so the user still gets data even if visualization fails
+            return { 
+                success: true, 
+                partial: true, 
+                message: "Visualization features are limited, but I've processed your data request."
+            };
+        }
+    }
+
     // Process Power BI filter chat message and handle visualization requests
     async function processPBIFilterMessage(message) {
         if (pbiWaitingForResponse) return;
@@ -765,44 +1384,29 @@ async function createManualVisual() {
                     const vizData = await vizDataResponse.json();
                     
                     // Find this part in processPBIFilterMessage function
-if (vizData.success && vizData.queryResults) {
-    // Check if we're in development mode or have a real report
-    if (reportObj) {
-        // Create or update visualization using the data
-        const result = await createOrUpdateVisualization(
-            reportObj, 
-            data.visualization, 
-            vizData.queryResults
-        );
-        
-        if (result.success) {
-            visualCreated = true;
-            changesApplied = true;
-            
-            // If it was only partially successful, add the result message to the explanation
-            if (result.partial && result.message) {
-                return `${data.explanation}\n\n(Note: ${result.message})`;
-            }
-        } else if (result.error) {
-            console.error('Error creating visualization:', result.error);
-            
-            // Return explanation and show the data anyway
-            return `${data.explanation}\n\n(Note: I've analyzed the data, but couldn't create a visualization in the report. The embedding configuration may have limited visual capabilities.)`;
-        }
-    } else {
-        // In development mode, show the visualization data
-        console.log('Development mode - visualization data:', vizData.queryResults);
-        
-        // Create a visual representation of the data in the chat
-        const vizElement = createVisualDataPreview(vizData.queryResults, data.visualization);
-        elements.pbiMessages.appendChild(vizElement);
-        elements.pbiMessages.scrollTop = elements.pbiMessages.scrollHeight;
-        visualCreated = true;
-    }
-} else {
-    console.error('Error with visualization data:', vizData.error || 'Unknown error');
-    return `${data.explanation} (Note: I couldn't get the data for the visualization. ${vizData.error || ''})`;
-}
+                    if (vizData.success && vizData.queryResults) {
+                        // Create a visualization directly in the chat
+                        const chartElement = createChartVisualization(
+                            elements.pbiMessages, 
+                            data.visualization, 
+                            vizData.queryResults
+                        );
+                        
+                        if (chartElement) {
+                            visualCreated = true;
+                            changesApplied = true;
+                        } else {
+                            // If chart creation failed, display the data as a table
+                            console.log('Visualization creation failed, showing data as table');
+                            const tableElement = addResultTable(elements.pbiMessages, vizData.queryResults);
+                            if (tableElement) {
+                                visualCreated = true;
+                            }
+                        }
+                    } else {
+                        console.error('Error with visualization data:', vizData.error || 'Unknown error');
+                        return `${data.explanation} (Note: I couldn't get the data for the visualization. ${vizData.error || ''})`;
+                    }
                 } catch (vizError) {
                     console.error('Error processing visualization:', vizError);
                     return `${data.explanation} (Note: There was an error creating the visualization: ${vizError.message})`;
@@ -829,250 +1433,6 @@ if (vizData.success && vizData.queryResults) {
             }
             pbiWaitingForResponse = false;
         }
-    }
-
-    // Helper function to create or update a visualization in the report
-// Also update the createOrUpdateVisualization function to use authoring page
-// Updated createOrUpdateVisualization function for alternative approach
-// Simplified function to work with existing visuals
-// Final version that doesn't use addDataField at all
-async function createOrUpdateVisualization(report, vizConfig, vizData) {
-    try {
-        if (!report || !vizConfig || !vizData) {
-            return { success: false, error: 'Missing required parameters' };
-        }
-        
-        // If we have a saved visual reference, use it
-        if (window.lastCreatedVisual) {
-            defaultVisual = window.lastCreatedVisual;
-        }
-        
-        // If we have a visual to work with
-        if (defaultVisual) {
-            console.log("Using existing visual for update:", defaultVisual);
-            
-            try {
-                // Try to update visual using updateSettings if available
-                try {
-                    await defaultVisual.updateSettings({
-                        general: {
-                            formatString: vizConfig.title || `${vizConfig.type} chart`,
-                            visible: true,
-                            displayName: true
-                        }
-                    });
-                    console.log("Updated visual settings");
-                } catch (settingsError) {
-                    console.log("Could not update visual settings:", settingsError);
-                }
-                
-                // Try to set visual properties if available
-                try {
-                    const properties = {
-                        general: {
-                            formatString: vizConfig.title || `${vizConfig.type} chart`,
-                            visible: true,
-                            displayName: true
-                        }
-                    };
-                    
-                    await defaultVisual.setProperties(properties);
-                    console.log("Set visual properties");
-                } catch (propertiesError) {
-                    console.log("Could not set visual properties:", propertiesError);
-                }
-                
-                // Try operations API as a last resort
-                try {
-                    await report.executeOperation({
-                        name: 'SetVisualDisplayState',
-                        visualName: defaultVisual.name,
-                        displayState: 'visible'
-                    });
-                    console.log("Made visual visible using operations API");
-                } catch (operationError) {
-                    console.log("Could not use operations API:", operationError);
-                }
-                
-                // Even if we couldn't update the visual, return success
-                // This will let the chat continue to provide useful information
-                return { 
-                    success: true, 
-                    partial: true, 
-                    message: "The visualization data is shown in text format because your embedding configuration has limited visualization capabilities." 
-                };
-                
-            } catch (updateError) {
-                console.error("Error working with visual:", updateError);
-                
-                // Still return partial success so the user gets the data even if visualization fails
-                return { 
-                    success: true, 
-                    partial: true, 
-                    message: "Visualization not fully supported in current configuration, but I've processed your data."
-                };
-            }
-        }
-        
-        // If we don't have a visual to work with, return success but explain the limitations
-        // This will ensure the user still gets the data and explanation
-        return { 
-            success: true, 
-            partial: true, 
-            message: "Your embedding configuration doesn't support creating visuals, but I've processed the data for you."
-        };
-        
-    } catch (error) {
-        console.error("General error in createOrUpdateVisualization:", error);
-        
-        // Return partial success so the user still gets data even if visualization fails
-        return { 
-            success: true, 
-            partial: true, 
-            message: "Visualization features are limited, but I've processed your data request."
-        };
-    }
-}
-
-// Helper function to map visualization types
-function mapVisualizationType(type) {
-    const typeMap = {
-        'bar': 'barChart',
-        'column': 'columnChart',
-        'line': 'lineChart',
-        'pie': 'pieChart',
-        'scatter': 'scatterChart',
-        'area': 'areaChart',
-        'donut': 'donutChart',
-        'table': 'tableEx'
-    };
-    
-    return typeMap[type.toLowerCase()] || 'columnChart';
-}
-
-    // Helper to create visual properties from config
-    function createVisualPropertiesFromConfig(vizConfig, vizData) {
-        // Default properties based on visualization type
-        let properties = {
-            general: {
-                formatString: vizConfig.title || `Generated ${vizConfig.type} chart`,
-                displayName: true
-            },
-            categoryAxis: {
-                show: true
-            },
-            valueAxis: {
-                show: true
-            },
-            legend: {
-                show: true,
-                position: 'Right'
-            }
-        };
-        
-        // Customize properties based on visualization type
-        switch (vizConfig.type.toLowerCase()) {
-            case 'column':
-            case 'bar':
-                properties.legend.show = false;
-                break;
-                
-            case 'pie':
-            case 'donut':
-                properties.legend.position = 'Bottom';
-                break;
-                
-            case 'scatter':
-                properties.bubbleSize = {
-                    show: true
-                };
-                break;
-        }
-        
-        // Map data roles to visual properties
-        if (vizConfig.dataRoles && vizConfig.dataRoles.length > 0) {
-            properties.dataRoles = vizConfig.dataRoles.map(role => {
-                return {
-                    name: role.name,
-                    displayName: role.column,
-                    kind: role.name === 'category' ? 'Grouping' : 'Measure'
-                };
-            });
-        }
-        
-        return properties;
-    }
-
-    // For development mode - create a visual representation of data in the chat
-    function createVisualDataPreview(queryResults, vizConfig) {
-        const previewElement = document.createElement('div');
-        previewElement.classList.add('message', 'assistant', 'visual-preview');
-        
-        // Create a title for the visualization
-        const titleElement = document.createElement('h4');
-        titleElement.textContent = vizConfig.title || `${vizConfig.type.charAt(0).toUpperCase() + vizConfig.type.slice(1)} Chart`;
-        previewElement.appendChild(titleElement);
-        
-        // Add info about what this is
-        const infoText = document.createElement('p');
-        infoText.innerHTML = `<small><em>Development mode: Visualization preview (in production this would create a ${vizConfig.type} chart in the report)</em></small>`;
-        previewElement.appendChild(infoText);
-        
-        // Add the data preview
-        if (queryResults && queryResults.tables && queryResults.tables.length > 0) {
-            const table = document.createElement('table');
-            table.classList.add('results-table');
-            
-            // Add headers
-            const thead = document.createElement('thead');
-            const headerRow = document.createElement('tr');
-            
-            // Get column names
-            const columns = queryResults.tables[0].columns;
-            columns.forEach(column => {
-                const th = document.createElement('th');
-                th.textContent = column.name;
-                headerRow.appendChild(th);
-            });
-            
-            thead.appendChild(headerRow);
-            table.appendChild(thead);
-            
-            // Add data rows
-            const tbody = document.createElement('tbody');
-            const rows = queryResults.tables[0].rows;
-            
-            rows.forEach(row => {
-                const tr = document.createElement('tr');
-                
-                // Add each cell value
-                row.forEach((value, index) => {
-                    const td = document.createElement('td');
-                    
-                    // Format the value based on column type
-                    if (typeof value === 'number') {
-                        td.textContent = value.toLocaleString();
-                    } else if (value === null) {
-                        td.innerHTML = '<em>N/A</em>';
-                    } else {
-                        td.textContent = value;
-                    }
-                    
-                    tr.appendChild(td);
-                });
-                
-                tbody.appendChild(tr);
-            });
-            
-            table.appendChild(tbody);
-            previewElement.appendChild(table);
-        } else {
-            const noDataMessage = document.createElement('p');
-            noDataMessage.textContent = 'No data available for this visualization.';
-            previewElement.appendChild(noDataMessage);
-        }
-        
-        return previewElement;
     }
 
     // Process Azure OpenAI chat message - Modified to handle semantic model query results
@@ -1192,11 +1552,10 @@ function mapVisualizationType(type) {
         setupVisualizationToggle();
         
         // Set up the Create Visual button
-        // Set up the Create Visual button
-if (elements.createVisualBtn) {
-    elements.createVisualBtn.addEventListener('click', createManualVisual);
-    elements.createVisualBtn.disabled = true; // Initially disabled until report loads
-}
+        if (elements.createVisualBtn) {
+            elements.createVisualBtn.addEventListener('click', createManualVisual);
+            elements.createVisualBtn.disabled = true; // Initially disabled until report loads
+        }
     }
 
     // Function to update PBI Filter chat welcome message
