@@ -2,7 +2,7 @@
 
 A modern web application that combines Power BI embedded analytics with natural language chat interfaces powered by Azure OpenAI. This app allows users to interact with Power BI reports through conversation, applying filters and creating visualizations using natural language.
 
-![Power BI Chat Interface](https://placehold.co/800x400?text=Power+BI+Chat+Interface)
+![Power BI Chat Interface](/image/screencappbi.png)
 
 ## 🌟 Features
 
@@ -149,18 +149,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 Contributions are welcome! Please feel free to submit a pull request.
 
----
-
-## Screenshots
-
-![Filter Chat](https://placehold.co/800x400?text=Filter+Chat+Screenshot)
-*Example of the Filter & Visualization Chat interface*
-
-![Visualization in Chat](https://placehold.co/800x400?text=Chart+Visualization+Example)
-*Chart visualization rendered directly in the chat interface*
-
-![Semantic Model Query](https://placehold.co/800x400?text=Semantic+Model+Query+Example)
-*Semantic model query results with data table*
 
 ---
 
