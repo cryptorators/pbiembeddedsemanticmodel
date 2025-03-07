@@ -18,7 +18,6 @@ A modern web application that combines Power BI embedded analytics with natural 
 ### 🔍 Power BI Integration
 - Embedded Power BI report with filter pane and navigation controls
 - Natural language to DAX query conversion for semantic model analysis
-- Row-level security (RLS) support for personalized data access
 
 ### 🧠 AI-Powered Features
 - Natural language processing via Azure OpenAI
